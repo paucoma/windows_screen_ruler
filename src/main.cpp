@@ -12,6 +12,8 @@
 #define UNICODE
 #endif
 
+#include <stdint.h>
+
 #include <iostream>
 #include <cmath>
 #include <windows.h>
@@ -21,6 +23,10 @@
 #include <gdiplus.h>
 #include <objidl.h>
 #pragma comment (lib, "Gdiplus.lib")
+
+#ifndef M_PI
+#define M_PI (3.14159265358979323846)
+#endif
 
 struct RulerInfo {
     uint16_t pos_x;

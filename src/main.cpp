@@ -41,7 +41,14 @@ RulerInfo *pState = new (std::nothrow) RulerInfo;
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 // LRESULT CALLBACK MouseProc(int nCode, WPARAM wParam, LPARAM lParam);
+BOOL WINAPI OnContextMenu(HWND hwnd, int x, int y);
+#define ID_FILE_ABOUT 1
+#define ID_FILE_EXIT  2
+VOID APIENTRY DisplayContextMenu(HWND hwnd, POINT pt);
+
 void updateMousePosition(HWND hwnd, RulerInfo *pState, bool updateClickedPoints);
+
+HINSTANCE hinst;
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow)
 {
@@ -63,6 +70,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
     RegisterClass(&wc);
+
+    hinst = hInstance;
 
     // Define the state
     if (pState == NULL) {
@@ -115,9 +124,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine,
     return 0;
 }
 
+// [Writing the Window Procedure](https://learn.microsoft.com/en-us/windows/win32/learnwin32/writing-the-window-procedure)
+// [Window Notifications](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-notifications)
+// https://learn.microsoft.com/en-us/windows/win32/winmsg/about-messages-and-message-queues#system-defined-messages
+// https://learn.microsoft.com/en-us/windows/win32/winmsg/about-messages-and-message-queues#application-defined-messages
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     RulerInfo *pState;
     if (uMsg == WM_CREATE) {
+        // https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-create
+        // Sent when an application requests that a window be created by calling the CreateWindowEx or CreateWindow function. 
+        //  (The message is sent before the function returns.)
+        //  This is basically our initialization, we create our Struct
         CREATESTRUCT *pCreate = reinterpret_cast<CREATESTRUCT*>(lParam);
         pState = reinterpret_cast<RulerInfo*>(pCreate->lpCreateParams);
         SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)pState);
@@ -126,14 +143,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         LONG_PTR ptr = GetWindowLongPtr(hwnd, GWLP_USERDATA);
         pState = reinterpret_cast<RulerInfo*>(ptr);
     }
-
+   
     switch (uMsg)
-    {
+    {        
     case WM_DESTROY:
+        //https://learn.microsoft.com/en-us/windows/win32/winmsg/wm-destroy
+        //  Sent when a window is being destroyed.
+        //  End of Our Application
         PostQuitMessage(0);
         return 0;
     
     case WM_MOUSEMOVE:
+        // https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-mousemove
         {
             pState->pos_x = GET_X_LPARAM(lParam);
             pState->pos_y = GET_Y_LPARAM(lParam);
@@ -142,6 +163,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         return 0;
 
     case WM_LBUTTONDOWN:
+        // https://learn.microsoft.com/en-us/windows/win32/inputdev/wm-lbuttondown
         {
             pState->pos_x = GET_X_LPARAM(lParam);
             pState->pos_y = GET_Y_LPARAM(lParam);
@@ -161,6 +183,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         return 0;
 
     case WM_PAINT:
+        // https://learn.microsoft.com/en-us/windows/win32/gdi/wm-paint
         {
             PAINTSTRUCT ps;
             HDC hdc = BeginPaint(hwnd, &ps);
@@ -200,11 +223,103 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             EndPaint(hwnd, &ps);
         }
         return 0;
+    case WM_CONTEXTMENU:
+    // https://learn.microsoft.com/en-us/windows/win32/menurc/using-menus#processing-the-wm_contextmenu-message
+        {
+            if (!OnContextMenu(hwnd, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam))) 
+                return DefWindowProc(hwnd, uMsg, wParam, lParam); 
+        }
+        break;
+    case WM_COMMAND:
+        switch ((wParam))
+        {
+            case ID_FILE_ABOUT:
+                MessageBox(hwnd, L"About menu item clicked", L"Notice", MB_OK | MB_ICONINFORMATION);
+            break;
+            case ID_FILE_EXIT:
+                PostQuitMessage(0);
+                return 0;
+            break;
+        }
         // break;
     }
+
+    // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-defwindowproca
+    //  If you don't handle a particular message in your window procedure, 
+    //  pass the message parameters directly to the DefWindowProc function. 
+    //  This function performs the default action for the message, which varies by message type.
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
+BOOL WINAPI OnContextMenu(HWND hwnd, int x, int y) 
+{ 
+    RECT rc;                    // client area of window 
+    POINT pt = { x, y };        // location of mouse click 
+ 
+    // Get the bounding rectangle of the client area. 
+ 
+    GetClientRect(hwnd, &rc); 
+ 
+    // Convert the mouse position to client coordinates. 
+ 
+    ScreenToClient(hwnd, &pt); 
+ 
+    // If the position is in the client area, display a  
+    // shortcut menu. 
+ 
+    if (PtInRect(&rc, pt)) 
+    { 
+        ClientToScreen(hwnd, &pt); 
+        DisplayContextMenu(hwnd, pt); 
+        return TRUE; 
+    } 
+ 
+    // Return FALSE if no menu is displayed. 
+ 
+    return FALSE; 
+} 
+
+
+
+VOID APIENTRY DisplayContextMenu(HWND hwnd, POINT pt) 
+{ 
+ /*
+    HMENU hmenu;            // top-level menu 
+    HMENU hmenuTrackPopup;  // shortcut menu 
+ 
+    // Load the menu resource. 
+    // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-loadmenua
+    if ((hmenu = LoadMenu(hinst, "ShortcutExample")) == NULL) 
+        return; 
+ */
+    //HMENU hmenuTrackPopup = CreateMenu();
+    // main menu
+    // https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-createpopupmenu
+    HMENU hMenu = CreatePopupMenu();
+
+    // menu items
+    AppendMenu(hMenu, MF_STRING, ID_FILE_ABOUT, L"About");
+    AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+    AppendMenu(hMenu, MF_STRING, ID_FILE_EXIT, L"Exit");
+    //AppendMenu(hmenuTrackPopup, MF_POPUP, (UINT_PTR)hMenu, (LPCWSTR)"Dummy Popup");
+    // TrackPopupMenu cannot display the menu bar so get 
+    // a handle to the first shortcut menu. 
+ 
+    //hmenuTrackPopup = GetSubMenu(hMenu, 0); 
+ 
+    // Display the shortcut menu. Track the right mouse 
+    // button. 
+ 
+    //TrackPopupMenu(hmenuTrackPopup, 
+    //https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-trackpopupmenu
+    TrackPopupMenu(hMenu, 
+            TPM_LEFTALIGN | TPM_RIGHTBUTTON, 
+            pt.x, pt.y, 0, hwnd, NULL); 
+ 
+    // Destroy the menu. 
+ 
+    DestroyMenu(hMenu); 
+} 
 void updateMousePosition(HWND hwnd, RulerInfo *pState, bool updateClickedPoints) {
     HDC hdc = GetDC(hwnd);
     Gdiplus::Graphics graphics(hdc);
